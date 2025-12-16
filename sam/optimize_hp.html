@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RepViT Optimization Benchmark</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <style>
+        body { font-family: -apple-system, sans-serif; text-align: center; padding: 20px; background: #eef2f3; }
+        .container { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+        h1 { margin-bottom: 5px; color: #333; }
+        .subtitle { color: #666; font-size: 0.9em; margin-bottom: 25px; }
+        
+        img { max-width: 150px; border-radius: 10px; margin: 10px auto; display: block; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        
+        .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        button { flex: 1; padding: 15px; font-size: 16px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+        button:active { transform: scale(0.98); }
+        #loadBtn { background: #007bff; color: white; }
+        #runBtn { background: #28a745; color: white; display: none; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+
+        #status { margin: 20px 0; font-weight: bold; color: #555; }
+        
+        /* Bar Chart Styles */
+        .chart-container { margin-top: 30px; text-align: left; }
+        .bar-group { margin-bottom: 15px; }
+        .label { font-size: 0.9em; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .bar-bg { background: #eee; height: 24px; border-radius: 12px; overflow: hidden; position: relative; }
+        .bar-fill { height: 100%; width: 0%; transition: width 1s ease-out; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; color: white; font-size: 0.8em; font-weight: bold; }
+        
+        .original .bar-fill { background: #ffc107; color: #333; } /* Kuning */
+        .optimized .bar-fill { background: #28a745; } /* Hijau */
+        
+        .speedup-badge { display: inline-block; margin-top: 10px; padding: 5px 15px; background: #d4edda; color: #155724; border-radius: 20px; font-weight: bold; opacity: 0; transition: opacity 0.5s; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚀 Optimization Test</h1>
+    <div class="subtitle">Original (FP32) vs Quantized (Int8)</div>
+    
+    <img src="app/assets/picture1.jpg" alt="Test Image">
+    
+    <div id="status">Ready to load models...</div>
+    
+    <div class="btn-group">
+        <button id="loadBtn" onclick="loadModels()">📥 Load Models</button>
+        <button id="runBtn" onclick="runComparison()">⚡ Run Comparison</button>
+    </div>
+
+    <div class="chart-container">
+        <div class="bar-group original">
+            <div class="label">
+                <span>Original (FP32)</span>
+                <span id="time-orig">-- ms</span>
+            </div>
+            <div class="bar-bg">
+                <div id="bar-orig" class="bar-fill"></div>
+            </div>
+        </div>
+
+        <div class="bar-group optimized">
+            <div class="label">
+                <span>Quantized (Int8)</span>
+                <span id="time-opt">-- ms</span>
+            </div>
+            <div class="bar-bg">
+                <div id="bar-opt" class="bar-fill"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="speedup" class="speedup-badge"></div>
+</div>
+
+<script>
+    // Paths
+    const PATH_ORIG = 'repvit_sam_image_encoder.onnx';
+    const PATH_OPT = 'repvit_encoder_quantized.onnx'; // File baru hasil kuantisasi
+    
+    let sessOrig = null;
+    let sessOpt = null;
+
+    async function loadModels() {
+        const btn = document.getElementById('loadBtn');
+        const status = document.getElementById('status');
+        btn.disabled = true;
+
+        try {
+            const option = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
+
+            status.innerText = "1/2 Loading Original Model (FP32)...";
+            sessOrig = await ort.InferenceSession.create(PATH_ORIG, option);
+
+            status.innerText = "2/2 Loading Quantized Model (Int8)...";
+            sessOpt = await ort.InferenceSession.create(PATH_OPT, option);
+
+            status.innerText = "✅ Models Loaded!";
+            btn.style.display = 'none';
+            document.getElementById('runBtn').style.display = 'block';
+
+        } catch (e) {
+            status.innerText = "❌ Load Error: " + e.message;
+            console.error(e);
+            btn.disabled = false;
+        }
+    }
+
+    async function runBenchmark(session) {
+        // Dummy Input 1024x1024
+        const inputTensor = new ort.Tensor('float32', new Float32Array(1 * 3 * 1024 * 1024).fill(0.5), [1, 3, 1024, 1024]);
+        
+        // Warmup (Opsional, tapi bagus untuk kestabilan)
+        await session.run({ 'image': inputTensor });
+
+        const start = performance.now();
+        await session.run({ 'image': inputTensor });
+        const end = performance.now();
+        
+        return end - start;
+    }
+
+    async function runComparison() {
+        const btn = document.getElementById('runBtn');
+        const status = document.getElementById('status');
+        btn.disabled = true;
+        
+        // Reset Bars
+        document.getElementById('bar-orig').style.width = '0%';
+        document.getElementById('bar-opt').style.width = '0%';
+        document.getElementById('speedup').style.opacity = '0';
+
+        try {
+            // 1. Run Original
+            status.innerText = "Testing Original Model...";
+            await new Promise(r => setTimeout(r, 50)); // UI refresh
+            const tOrig = await runBenchmark(sessOrig);
+            
+            document.getElementById('time-orig').innerText = tOrig.toFixed(0) + " ms";
+            document.getElementById('bar-orig').style.width = '100%'; // Base reference
+            document.getElementById('bar-orig').innerText = tOrig.toFixed(0) + "ms";
+
+            // 2. Run Optimized
+            status.innerText = "Testing Quantized Model...";
+            await new Promise(r => setTimeout(r, 500));
+            const tOpt = await runBenchmark(sessOpt);
+
+            document.getElementById('time-opt').innerText = tOpt.toFixed(0) + " ms";
+            // Hitung lebar bar relatif terhadap original
+            const widthPct = Math.min((tOpt / tOrig) * 100, 100);
+            document.getElementById('bar-opt').style.width = widthPct + '%';
+            document.getElementById('bar-opt').innerText = tOpt.toFixed(0) + "ms";
+
+            // 3. Conclusion
+            status.innerText = "Done!";
+            const speedup = ((tOrig - tOpt) / tOrig) * 100;
+            const xTimes = tOrig / tOpt;
+            
+            const badge = document.getElementById('speedup');
+            badge.innerText = `🚀 ${xTimes.toFixed(2)}x Faster (${speedup.toFixed(0)}% Speedup)`;
+            badge.style.opacity = '1';
+
+        } catch (e) {
+            status.innerText = "❌ Error: " + e.message;
+            console.error(e);
+        }
+        btn.disabled = false;
+    }
+</script>
+
+</body>
+</html>
