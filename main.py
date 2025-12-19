@@ -149,8 +149,9 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data-path', default='/root/FastBaseline/data/imagenet', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
-                        type=str, help='Image Net dataset path')
+    # Di dalam main.py, cari bagian ini:
+    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19', 'CALTECH256'], # Tambahkan 'CALTECH256' di sini
+                    type=str, help='Image Net dataset path')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order',
                                  'supercategory', 'family', 'genus', 'name'],
