@@ -96,6 +96,13 @@ def build_dataset(is_train, args):
         dataset = INatDataset(args.data_path, train=is_train, year=2019,
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
+    elif args.data_set == 'CALTECH256':
+        # Menentukan sub-folder berdasarkan fase (train/val) hasil dari splitfolders
+        root = os.path.join(args.data_path, 'train' if is_train else 'val')
+        if not os.path.exists(root):
+            raise FileNotFoundError(f"Folder {root} tidak ditemukan. Pastikan sudah menjalankan splitfolders.")
+        dataset = datasets.ImageFolder(root, transform=transform)
+        nb_classes = 257 # Caltech 256 memiliki 256 kategori + 1 kategori clutter
     return dataset, nb_classes
 
 
