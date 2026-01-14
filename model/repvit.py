@@ -120,11 +120,6 @@ class RepVGGDW(torch.nn.Module):
         conv.bias.data.copy_(b)
         return conv
 
-
-# ==========================================
-# PASTE KODE INI DI ATAS CLASS RepViTBlock
-# ==========================================
-
 class ChannelAttention(nn.Module):
     def __init__(self, in_planes, ratio=16):
         super(ChannelAttention, self).__init__()
